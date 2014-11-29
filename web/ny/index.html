@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>dc.js - NewYork data dive</title>
+
+    <meta charset="UTF-8">
+
+    <link href="../css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="../css/dc.css"/>
+    <style>
+        .container{width: auto;}
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <h2>dc.js - NewYork data dive</h2>
+
+    <p>
+        This is a <a href="../index.html">dc.js</a> example showing how GeoJson Polygon can be associated with
+        crossfilter
+        dimension and group using a choropleth chart. Different regions can be colored differently based on different
+        calculation (amount raised). Like any other dc.js chart a choropleth chart can then be mixed with other dc.js
+        chart
+        or your own custom d3 drawing. In this example we have shown how it can work with multiple bubble chart.
+    </p>
+
+
+    <div id="ny-chart">
+        <strong>Map (color: Population)</strong>
+        <a class="reset" href="javascript:nyChart.filterAll();dc.redrawAll();" style="display: none;">reset</a>
+        <span class="reset" style="display: none;"> | Current filter: <span class="filter"></span></span>
+
+        <div class="clearfix"></div>
+    </div>
+    <div id="ny-chart2">
+        <strong>Map (color: Gross income in $M)</strong>
+        <a class="reset" href="javascript:nyChart2.filterAll();dc.redrawAll();" style="display: none;">reset</a>
+        <span class="reset" style="display: none;"> | Current filter: <span class="filter"></span></span>
+
+        <div class="clearfix"></div>
+    </div>
+
+    <div class="clearfix"></div>
+    <div id="crimes-chart">
+        <strong>Crimes</strong>
+        <a class="reset" href="javascript:crimesChart.filterAll();dc.redrawAll();" style="display: none;">reset</a>
+        <span class="reset" style="display: none;"> | Current filter: <span class="filter"></span></span>
+
+        <div class="clearfix"></div>
+    </div>
+    <div id="earnings-chart">
+        <strong>Earnings</strong>
+        <a class="reset" href="javascript:earningsChart.filterAll();dc.redrawAll();" style="display: none;">reset</a>
+        <span class="reset" style="display: none;"> | Current filter: <span class="filter"></span></span>
+
+        <div class="clearfix"></div>
+    </div>
+    <div id="bubble-chart">
+        <strong>By race composition</strong> (y: kids, x: foreigners, radius: total population)
+        <a class="reset" href="javascript:bubbleChart.filterAll();dc.redrawAll();" style="display: none;">reset</a>
+
+        <div class="clearfix"></div>
+    </div>
+    <div class="clearfix"></div>
+    
+
+<!--
+    <div id="industry-chart">
+        <strong>By Industries</strong> (y: number of deals, x: total amount raised in millions, radius: amount raised)
+        <a class="reset" href="javascript:industryChart.filterAll();dc.redrawAll();" style="display: none;">reset</a>
+
+        <div class="clearfix"></div>
+    </div>
+
+    <div class="clearfix"></div>
+
+    <div id="round-chart">
+        <strong>By Rounds</strong> (y: number of deals, x: total amount raised in millions, radius: amount raised)
+        <a class="reset" href="javascript:roundChart.filterAll();dc.redrawAll();" style="display: none;">reset</a>
+
+        <div class="clearfix"></div>
+    </div>
+
+    <div class="clearfix"></div>
+-->
+    <div>
+        <a href="javascript:dc.filterAll(); dc.renderAll();">Reset All</a>
+    </div>
+
+</div>
+
+<a href="https://github.com/dc-js/dc.js"><img style="position: absolute; top: 0; right: 0; border: 0;"
+                                                  src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png"
+                                                  alt="Fork me on GitHub"></a>
+
+<script type="text/javascript" src="../js/d3.js"></script>
+<script type="text/javascript" src="../js/crossfilter.js"></script>
+<script type="text/javascript" src="../js/dc.js"></script>
+<script type="text/javascript">
+    var numberFormat = d3.format(".2f");
+
+    var nyChart = dc.geoChoroplethChart("#ny-chart");
+    var nyChart2 = dc.geoChoroplethChart("#ny-chart2");
+    var crimesChart = dc.barChart("#crimes-chart");
+    var earningsChart = dc.barChart("#earnings-chart");
+    var bubbleChart = dc.bubbleChart("#bubble-chart");
+    //var industryChart = dc.bubbleChart("#industry-chart");
+    //var roundChart = dc.bubbleChart("#round-chart");
+
+    d3.dsv(";", "text/plain")("data-all.csv", function (csv) {
+        csv.forEach(function(d){
+            d.kids =  +d["population_age_males_0to9"] + +d["population_age_males_10to19"] + +d["population_age_females_0to9"] + +d["population_age_females_10to19"];
+            var white = +d["race_white"];
+            var black = +d["race_black"];
+            var otherr = +d["race_indian"] + +d["race_asian"]+ +d["race_hawaiian"] + +d["race_other"] + +d["race_two_or_more"];
+            var sum = white + black+ otherr;
+            var pop = sum?"WHITE "+parseInt(white/(sum*0.25))+ " BLACK "+parseInt(black/(sum*0.25)) + " OTHER "+parseInt(otherr/(sum*0.25)):"NO POP";
+            d.races = pop;
+        });
+        var data = crossfilter(csv);
+        
+       var races = data.dimension(function (d) {
+            return d.races;
+        });
+        var racesKids = races.group().reduceSum(function (d) {
+             return d.kids;
+        });
+        var racesForeigners = races.group().reduceSum(function (d) {
+             return +d["nationality_us_citizen_born_in_abroad"];
+        });
+        var racesTotal = races.group().reduceSum(function (d) {
+             return +d["population_total"];
+        });
+        var statsByRaces = races.group().reduce(
+                function (p, d) {
+                    p.kids += d.kids;
+                    p.foreigners += +d["nationality_us_citizen_born_in_abroad"];
+                    p.total += +d["population_total"];
+                    p.unemployed += +d["unemployment_rate"]*+d["population_total"]/100;
+                    p.count++;
+                    return p;
+                },
+                function (p, d) {
+                    p.kids -= d.kids;
+                    p.foreigners -= +d["nationality_us_citizen_born_in_abroad"];
+                    p.total -= +d["population_total"];
+                    p.unemployed -= +d["unemployment_rate"]*+d["population_total"]/100;
+                    p.count--;
+                    return p;
+                },
+                function () {
+                    return {kids: 0, foreigners: 0, total:0, unemployed:0, count:0};
+                }
+        );
+        
+
+        var zips = data.dimension(function (d) {
+            return d["name"];
+        });
+        var zipCrime = zips.group().reduceSum(function (d) {
+             return +(d["population_total"]*d["crimes_1000capita_burglary"]/1000);
+        });
+        var zipGrossIncome = zips.group().reduceSum(function (d) {
+             return +d["population_total"]*d["mean_annual_earnings_total"]/100000;
+        });
+
+
+        var crimes = data.dimension(function (d) {
+            return parseInt(10*d["crimes_1000capita_burglary"]);
+        });
+        var populationByCrimes = crimes.group().reduceSum(function (d) {
+            return +d["population_total"];
+        });
+         
+        var earnings = data.dimension(function (d) {
+            return +parseInt(d["mean_annual_earnings_total"]/10000);
+        });
+        
+        var populationByEarnings = earnings.group().reduceSum(function (d) {
+            return d["population_total"];
+        });
+        
+        
+
+        d3.json("nyc.geojson", function (zipsJson) {
+            var reds = ["#fef0d9","#fdd49e","#fdbb84","#fc8d59","#ef6548","#d7301f","#990000"];
+            var blues = ["#E2F2FF", "#C4E4FF", "#9ED2FF", "#81C5FF", "#6BBAFF", "#51AEFF", "#36A2FF", "#1E96FF", "#0089FF", "#0061B5"];
+            var projection = d3.geo.mercator().center([-73.683573184, 40.751662187]).scale(50000);
+            nyChart.width(500)
+                    .height(500)
+                    .dimension(zips)
+                    .group(zipCrime)
+                    .projection(projection)
+                    .colors(d3.scale.quantize().range(reds))
+                    .colorDomain([0, 200])
+                    .colorCalculator(function (d) {
+                        return d ? nyChart.colors()(d) : '#ccc';
+                    })
+                    .overlayGeoJson(zipsJson.features, "zipCode", function (d) {
+                        return d.properties.postalCode;
+                    })
+                    .title(function (d) {
+                        return "District: " + d.key + "\nPopulation: " + numberFormat(d.value ? d.value : 0) + "";
+                    });
+            
+            nyChart2.width(500)
+                    .height(500)
+                    .dimension(zips)
+                    .group(zipGrossIncome)
+                    .projection(projection)
+                    .colors(d3.scale.quantize().range(["#E2F2FF", "#C4E4FF", "#9ED2FF", "#81C5FF", "#6BBAFF", "#51AEFF", "#36A2FF", "#1E96FF", "#0089FF", "#0061B5"]))
+                    .colorDomain([0, 100000])
+                    .colorCalculator(function (d) {
+                        return d ? nyChart2.colors()(d) : '#ccc';
+                    })
+                    .overlayGeoJson(zipsJson.features, "zipCode", function (d) {
+                        return d.properties.postalCode;
+                    })
+                    .title(function (d) {
+                        return "District: " + d.key + "\nPopulation: " + numberFormat(d.value ? d.value/10 : 0) + "";
+                    });
+            
+            crimesChart
+              .width(400)
+              .height(200)
+              .x(d3.scale.linear().domain([0,50]))
+              .brushOn(true)
+              .yAxisLabel("This is the Y Axis!")
+              .dimension(crimes)
+              .group(populationByCrimes)
+              .renderlet(function(chart) {
+                  chart.selectAll('rect').on("click", function(d) {
+                      console.log("click!", d);
+                  });
+              });
+              
+            earningsChart
+              .width(400)
+              .height(200)
+              .x(d3.scale.linear().domain([0,20]))
+              .brushOn(true)
+              .yAxisLabel("This is the Y Axis!")
+              .dimension(earnings)
+              .group(populationByEarnings)
+              .renderlet(function(chart) {
+                  chart.selectAll('rect').on("click", function(d) {
+                      console.log("click!", d);
+                  });
+              });
+
+                    
+
+            bubbleChart.width(990)
+                    .height(400)
+                    .margins({top: 10, right: 50, bottom: 30, left: 60})
+                    .dimension(races)
+                    .group(statsByRaces)
+                    .colors(d3.scale.quantize().range(reds))
+                    .colorAccessor(function (p) {
+                        return p.value.total?p.value.unemployed/p.value.total:0;
+                    })
+                    .colorDomain([0, 0.2])
+                    .keyAccessor(function (p) {
+                        return p.value.foreigners;
+                    })
+                    .valueAccessor(function (p) {
+                        return p.value.kids;
+                    })
+                    .radiusValueAccessor(function (p) {
+                        return p.value.total;
+                    })
+                    .x(d3.scale.linear().domain([0, 5000000]))
+                    .r(d3.scale.linear().domain([0, 4000000]))
+                    .minRadiusWithLabel(15)
+                    .elasticY(true)
+                    .yAxisPadding(100)
+                    .elasticX(true)
+                    .xAxisPadding(200)
+                    .maxBubbleRelativeSize(0.07)
+                    .renderHorizontalGridLines(true)
+                    .renderVerticalGridLines(true)
+                    .renderLabel(true)
+                    .renderTitle(true)
+                    .title(function (p) {
+                        return p.key
+                                + "\n"
+                                + "Kids: " + p.value.kids + "\n"
+                                + "Foreigners: " + p.value.foreigners + "\n"
+                                + "Unemployment: " + (p.value.total?100*p.value.unemployed/p.value.total:0);
+                    });
+            bubbleChart.yAxis().tickFormat(function (s) {
+                return s + " kids";
+            });
+            bubbleChart.xAxis().tickFormat(function (s) {
+                return s + " foreigners";
+            });
+/*
+            roundChart.width(990)
+                    .height(200)
+                    .margins({top: 10, right: 50, bottom: 30, left: 60})
+                    .dimension(rounds)
+                    .group(statsByRounds)
+                    .colors(d3.scale.category10())
+                    .keyAccessor(function (p) {
+                        return p.value.amountRaised;
+                    })
+                    .valueAccessor(function (p) {
+                        return p.value.deals;
+                    })
+                    .radiusValueAccessor(function (p) {
+                        return p.value.amountRaised;
+                    })
+                    .x(d3.scale.linear().domain([0, 5000]))
+                    .r(d3.scale.linear().domain([0, 9000]))
+                    .minRadiusWithLabel(15)
+                    .elasticY(true)
+                    .yAxisPadding(150)
+                    .elasticX(true)
+                    .xAxisPadding(300)
+                    .maxBubbleRelativeSize(0.07)
+                    .renderHorizontalGridLines(true)
+                    .renderVerticalGridLines(true)
+                    .renderLabel(true)
+                    .renderTitle(true)
+                    .title(function (p) {
+                        return p.key
+                                + "\n"
+                                + "Amount Raised: " + numberFormat(p.value.amountRaised) + "M\n"
+                                + "Number of Deals: " + numberFormat(p.value.deals);
+                    });
+            roundChart.yAxis().tickFormat(function (s) {
+                return s + " deals";
+            });
+            roundChart.xAxis().tickFormat(function (s) {
+                return s + "M";
+            });
+*/
+            dc.renderAll();
+        });
+    });
+</script>
+
+<script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-33628816-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function () {
+        var ga = document.createElement('script');
+        ga.type = 'text/javascript';
+        ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0];
+        s.parentNode.insertBefore(ga, s);
+    })();
+</script>
+</body>
+</html>
